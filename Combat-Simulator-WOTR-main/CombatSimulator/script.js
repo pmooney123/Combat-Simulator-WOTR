@@ -1,6 +1,6 @@
 let shadow = {
-    regulars: 0,
-    elites: 5,
+    regulars: 8,
+    elites: 2,
     leaders: 5,
     stronghold: false,
     city: false,
@@ -8,15 +8,15 @@ let shadow = {
 } //permanent starting conditions
 
 let free = {
-    regulars: 0,
-    elites: 5,
-    leaders: 5,
+    regulars: 3,
+    elites: 2,
+    leaders: 0,
     city: false,
-    stronghold: false,
+    stronghold: true,
     hits: 0,
 }
 
-let steps = 20000; //simulation N count
+let steps = 25000; //simulation N count
 let press = false; //press into strongholds?
 let warnings = []; //warning messages for shitty starting conditions
 
@@ -80,6 +80,8 @@ updateTexts();
 let info = {};
 let s = {};
 let f = {};
+
+let confusionOnes = 0;
 
 function resetInfo() {
     info.shadowWins = 0;
@@ -151,7 +153,12 @@ function resetCardEffects() {
     s.preHit = 0;
     s.preBonus = 0;
     s.preTarget = 0;
+    s.forfietLeaders = 0;
+    s.onslaught = 0;
+
     s.weCome = false;
+    s.mumakil = false;
+    s.foulStench = false;
     s.greatHost = false;
     s.postDice = 0;
     s.postHits = 0;
@@ -163,8 +170,13 @@ function resetCardEffects() {
     f.charge = false;
     f.preHit = 0 ;
     f.preDice = 0;
+    f.ldrHit = 0;
+    f.ldrActual = 0;
     f.preBonus = 0;
     f.preTarget = 0;
+    f.mightyHits = 0;
+    f.shieldwall = false;
+    f.confusion = false;
     f.checkForNoQuarter = 0;
 } //reset some variables associated with card effects every combat round
 
@@ -215,8 +227,43 @@ function getResult() {
                 case "great host":
                     s.greatHost = true;
                     break;
+                case "mumakil":
+                    s.combatBonus++;
+                    s.mumakil = true;
+                    break;
+                case "foul stench":
+                    s.foulStench = true;
+                    break;
+                case "cruel as death":
+                    s.forfietLeaders = 2;
+                    s.combatBonus++;
+                    break;
+                case "they are terrible":
+                    s.forfietLeaders = 1;
+                    s.leaderBonus++;
+                    break;
+                case "relentless1":
+                    s.combatBonus++;
+                    takeCasualties(s, 1);
+                    break;
+                case "relentless2":
+                    s.combatBonus+=2;
+                    takeCasualties(s, 2);
+                    break;
+                case "onslaught1":
+                    s.onslaught = 1;
+                    break;
+                case "onslaught2":
+                    s.onslaught = 2;
+                    break;
+                case "onslaught3":
+                    s.onslaught = 3;
+                    break;
+                case "onslaught4":
+                    s.onslaught = 4;
+                    break;
                 default:
-                    warnings.push("WARNING:s  card not registered");
+                    warnings.push("WARNING: shadow card not registered");
             }
             switch (freeCards[roundNumber]) {
                 case "sudden strike":
@@ -249,6 +296,18 @@ function getResult() {
                 case "hourndark":
                     s.maxDice = 2;
                     break;
+                case "anduril":
+                    f.mightyHits = 2;
+                    break;
+                case "mighty attack":
+                    f.mightyHits = 1;
+                    break;
+                case "shieldwall":
+                    f.shieldwall = true;
+                    break;
+                case "confusion":
+                    f.confusion = true;
+                    break;
                 case "special tile":
                     f.combatBonus++;
                     f.leaderBonus++;
@@ -263,7 +322,6 @@ function getResult() {
                 s.preHit = getRoll(3, 0, 4);
                 takeCasualties(f, s.preHit);
             }
-
             if (f.suddenStrike) {
                 f.preDice = Math.min(5, f.leaders);
                 let target = ((firstTurn && shadow.city) || shadow.stronghold) ? 6 : 5;
@@ -296,22 +354,43 @@ function getResult() {
             target = ((firstTurn && free.city) || free.stronghold) ? 6 : 5;
             bonus = s.combatBonus;
 
+            confusionOnes = 0;
             s.cmbHit = getRoll(s.cmbActual, bonus, target);
             s.hits += s.cmbHit;
 
+            if (f.confusion) {
+                f.hits += confusionOnes;
+            }
+
+
         //free rolls leader
-            f.leaderDice = Math.min(f.leaders, f.maxDice, f.regulars + f.elites);
-            f.ldrActual = f.leaderDice - f.cmbHit;
+            if (s.leaders >= f.leaders && s.foulStench) {
 
-            target = ((firstTurn && shadow.city) || shadow.stronghold) ? 6 : 5;
-            bonus = f.leaderBonus;
+            } else {
 
-            f.ldrHit = getRoll(f.ldrActual, bonus, target);
-            f.hits += f.ldrHit;
+                f.leaderDice = Math.min(f.leaders, f.maxDice, f.regulars + f.elites);
+                f.ldrActual = f.leaderDice - f.cmbHit;
+
+                for (let i = 0; i < f.mightyHits && f.ldrActual > 0; i++) {
+                    f.ldrActual--;
+                    f.ldrHit++;
+                }
+
+                target = ((firstTurn && shadow.city) || shadow.stronghold) ? 6 : 5;
+                bonus = f.leaderBonus;
+
+                f.ldrHit += getRoll(f.ldrActual, bonus, target);
+                f.hits += f.ldrHit;
+            }
 
         //shadow rolls leader
-            s.leaderDice = Math.min(s.leaders, s.maxDice, s.regulars + s.elites);
-            s.ldrActual = s.leaderDice - s.cmbHit;
+
+            s.leaderDice = Math.min(s.leaders - s.forfietLeaders, s.maxDice, s.regulars + s.elites);
+            let confusionBonus = confusionOnes;
+            if (!f.confusion) {
+                confusionBonus = 0;
+            }
+            s.ldrActual = s.leaderDice - (s.cmbHit + confusionBonus);
 
             target = ((firstTurn && free.city) || free.stronghold) ? 6 : 5;
             bonus = s.leaderBonus;
@@ -327,7 +406,16 @@ function getResult() {
                     }
                 }
             }
-
+            if (s.mumakil) {
+                if (s.hits > f.preHit + f.hits) {
+                    s.hits++;
+                }
+            }
+            if (f.shieldwall) {
+                if (s.hits > 1) {
+                    s.hits--;
+                }
+            }
         //both sides take hits
             takeCasualties(f, s.hits)
 
@@ -342,6 +430,14 @@ function getResult() {
             if (s.greatHost) {
                 if (s.regulars + s.elites >= 2 * (f.regulars + f.elites)) {
                     takeCasualties(f, 1);
+                }
+            }
+            if (s.onslaught > 0) {
+                for (let i = 0; i < s.onslaught && s.regulars + s.elites > 0; i++) {
+                    takeCasualties(s, 1);
+                    if (Math.random() > 0.5) {
+                        takeCasualties(f, 1);
+                    }
                 }
             }
 
@@ -506,6 +602,9 @@ function getRoll(numDice, bonus, target) {
     for (let i = 0; i < numDice; i++) {
         let roll = getRandomInt(6) + 1;
         rolls.push(roll);
+        if (roll === 1) {
+            confusionOnes++;
+        }
         if (roll + bonus >= target) {
             result++;
         }
